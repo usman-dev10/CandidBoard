@@ -1,0 +1,1 @@
+"""CandidBoard FastAPI application."""
