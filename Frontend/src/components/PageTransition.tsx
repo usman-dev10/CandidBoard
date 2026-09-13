@@ -29,7 +29,7 @@ export function PageTransition() {
 
     const click = (e: MouseEvent) => {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      const a = (e.target as HTMLElement | null)?.closest("a[href]");
+      const a = (e.target as HTMLElement | null)?.closest("a[href]") as HTMLAnchorElement | null;
       if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
       const next = destPath(a.getAttribute("href") || a.href);
       if (next) show(next);
