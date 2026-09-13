@@ -30,15 +30,20 @@ class Settings(BaseSettings):
 
     @property
     def db_url(self) -> str:
-        url = self.database_url.strip()
+        url = self.database_url.strip().strip('"').strip("'")
+        if url.startswith("https://"):
+            raise ValueError(
+                "DATABASE_URL must be the Postgres URI (postgresql://...), not the https project URL."
+            )
         if url.startswith("sqlite:///./"):
             db_dir = ROOT / "data"
             db_dir.mkdir(parents=True, exist_ok=True)
             return f"sqlite:///{(ROOT / url.replace('sqlite:///./', '')).as_posix()}"
         if url.startswith("postgres://"):
             url = "postgresql://" + url[len("postgres://") :]
-        if url.startswith("postgresql://") and "+psycopg" not in url.split("://", 1)[0]:
-            url = "postgresql+psycopg://" + url[len("postgresql://") :]
+        dialect = url.split("://", 1)[0] if "://" in url else ""
+        if dialect.startswith("postgresql") or dialect == "postgres":
+            url = "postgresql+psycopg2://" + url.split("://", 1)[1]
         if url.startswith("postgresql") and "sslmode=" not in url:
             url += ("&" if "?" in url else "?") + "sslmode=require"
         return url
