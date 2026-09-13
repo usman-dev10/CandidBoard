@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -30,23 +31,37 @@ class Settings(BaseSettings):
 
     @property
     def db_url(self) -> str:
-        url = self.database_url.strip().strip('"').strip("'")
-        if url.startswith("https://"):
-            raise ValueError(
-                "DATABASE_URL must be the Postgres URI (postgresql://...), not the https project URL."
-            )
-        if url.startswith("sqlite:///./"):
-            db_dir = ROOT / "data"
-            db_dir.mkdir(parents=True, exist_ok=True)
-            return f"sqlite:///{(ROOT / url.replace('sqlite:///./', '')).as_posix()}"
-        if url.startswith("postgres://"):
-            url = "postgresql://" + url[len("postgres://") :]
-        dialect = url.split("://", 1)[0] if "://" in url else ""
-        if dialect.startswith("postgresql") or dialect == "postgres":
-            url = "postgresql+psycopg2://" + url.split("://", 1)[1]
-        if url.startswith("postgresql") and "sslmode=" not in url:
-            url += ("&" if "?" in url else "?") + "sslmode=require"
-        return url
+        return normalize_db_url(self.database_url)
+
+
+def normalize_db_url(raw: str) -> str:
+    url = (raw or "").strip().strip('"').strip("'")
+    if url.startswith("sqlite:///./"):
+        db_dir = ROOT / "data"
+        db_dir.mkdir(parents=True, exist_ok=True)
+        return f"sqlite:///{(ROOT / url.replace('sqlite:///./', '')).as_posix()}"
+    if url.startswith("https://"):
+        raise ValueError("DATABASE_URL must start with postgresql:// not https://")
+    if "[YOUR-PASSWORD]" in url or "YOUR-PASSWORD" in url:
+        raise ValueError("Replace [YOUR-PASSWORD] in DATABASE_URL with the real database password.")
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+    if "://" not in url or not url.startswith("postgresql"):
+        raise ValueError(
+            "DATABASE_URL must look like postgresql://postgres:PASSWORD@db.xxx.supabase.co:5432/postgres"
+        )
+    body = url.split("://", 1)[1]
+    if "@" not in body:
+        raise ValueError("DATABASE_URL is missing @host. Copy URI from Supabase Settings → Database.")
+    creds, host = body.rsplit("@", 1)
+    user, password = (creds.split(":", 1) + [""])[:2] if ":" in creds else (creds, "")
+    password = quote(password, safe="%")
+    if host.startswith("["):
+        raise ValueError("DATABASE_URL host looks wrong. Remove leftover [brackets] from the password.")
+    rest = f"{user}:{password}@{host}"
+    if "sslmode=" not in rest:
+        rest += ("&" if "?" in rest else "?") + "sslmode=require"
+    return "postgresql+psycopg2://" + rest
 
 
 @lru_cache

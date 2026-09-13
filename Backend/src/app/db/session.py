@@ -8,8 +8,18 @@ from src.app.db.models import Base
 from src.app.db import trace  # noqa: F401  — register extra tables
 
 _settings = get_settings()
-connect_args = {"check_same_thread": False} if _settings.db_url.startswith("sqlite") else {}
-engine = create_engine(_settings.db_url, connect_args=connect_args, future=True)
+try:
+    db_url = _settings.db_url
+    if db_url.startswith("sqlite"):
+        engine = create_engine(db_url, connect_args={"check_same_thread": False}, future=True)
+    else:
+        engine = create_engine(db_url, connect_args={"sslmode": "require"}, future=True)
+except Exception as exc:
+    raise RuntimeError(
+        "DATABASE_URL is invalid. On Render paste Supabase Settings → Database → URI "
+        "(port 5432). Example: postgresql://postgres:PASSWORD@db.PROJECT.supabase.co:5432/postgres "
+        f"Detail: {exc}"
+    ) from exc
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
 
